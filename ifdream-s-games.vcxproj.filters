@@ -1,0 +1,158 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{1486B6F2-D1A9-4D24-B18A-4AFF978FF021}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ai">
+      <UniqueIdentifier>{5379F556-E83D-4013-A9E8-6740CD062E95}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\core">
+      <UniqueIdentifier>{3B4C34FB-1DB6-4608-814B-E6D5B4048B88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\modes">
+      <UniqueIdentifier>{D7F615AE-9BE3-4986-9559-9C5583E38CC4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\net">
+      <UniqueIdentifier>{4B6FFA98-79F6-4CB6-B5F2-2C0D988ED59C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\ui">
+      <UniqueIdentifier>{9799B529-34FE-48E0-BA91-3F113271F67B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="assets">
+      <UniqueIdentifier>{0A0CDFDB-5137-4215-8E28-A7BCB166D47C}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ai\Evaluator.cpp">
+      <Filter>src\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ai\Search.cpp">
+      <Filter>src\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\GameState.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\Rules.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\LanMode.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\LanLobby.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\LanSession.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\LanUi.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\PveMode.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\modes\PvpMode.cpp">
+      <Filter>src\modes</Filter>
+    </ClCompile>
+    <ClCompile Include="src\net\Net.cpp">
+      <Filter>src\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\net\OnlineGame.cpp">
+      <Filter>src\net</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Assets.cpp">
+      <Filter>src\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\BoardView.cpp">
+      <Filter>src\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Dialogs.cpp">
+      <Filter>src\ui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\Menu.cpp">
+      <Filter>src\ui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\ai\Evaluator.h">
+      <Filter>src\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ai\Search.h">
+      <Filter>src\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\GameState.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\GameTypes.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Rules.h">
+      <Filter>src\core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\LanMode.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\ModeResult.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\LanLobby.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\LanSession.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\LanUi.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\PveMode.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\modes\PvpMode.h">
+      <Filter>src\modes</Filter>
+    </ClInclude>
+    <ClInclude Include="src\net\Net.h">
+      <Filter>src\net</Filter>
+    </ClInclude>
+    <ClInclude Include="src\net\OnlineGame.h">
+      <Filter>src\net</Filter>
+    </ClInclude>
+    <ClInclude Include="src\net\Protocol.h">
+      <Filter>src\net</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Assets.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\BoardView.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Button.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Dialogs.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Menu.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Theme.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="assets\black.png">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\white.png">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\menu.png">
+      <Filter>assets</Filter>
+    </None>
+    <None Include="assets\board.png">
+      <Filter>assets</Filter>
+    </None>
+  </ItemGroup>
+</Project>

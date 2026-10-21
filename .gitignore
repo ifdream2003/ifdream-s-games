@@ -1,0 +1,12 @@
+# Visual Studio 用户文件与缓存
+/.vs/
+*.user
+
+# 构建输出
+/x64/
+/ifdream-s-games/x64/
+
+# 系统杂项
+Thumbs.db
+Desktop.ini
+.DS_Store
