@@ -8,6 +8,8 @@
 #include "net/OnlineGame.h"
 
 #include "ui/Assets.h"
+#include "ui/Display.h"
+#include "ui/Panel.h"
 
 #pragma comment(lib, "msimg32.lib")
 
@@ -32,6 +34,67 @@ std::wstring Widen(const std::string& text) {
     std::wstring wide(static_cast<size_t>(length - 1), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, &wide[0], length);
     return wide;
+}
+
+std::string Narrow(const std::wstring& text) {
+    if (text.empty()) {
+        return std::string();
+    }
+    const int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+                                           nullptr, 0, nullptr, nullptr);
+    if (length <= 0) {
+        return std::string();
+    }
+    std::string utf8(static_cast<size_t>(length), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+                        &utf8[0], length, nullptr, nullptr);
+    return utf8;
+}
+
+std::wstring DescribeNetError(const std::string& error) {
+    if (error.empty()) {
+        return L"未知错误";
+    }
+    if (error == "invalid IPv4 address") {
+        return L"IP 地址格式不正确";
+    }
+    if (error == "connection refused") {
+        return L"对方没有在监听该端口（连接被拒绝），请确认端口填写正确";
+    }
+    if (error == "connect timed out" || error == "connection timed out") {
+        return L"连接超时，请检查 IP、端口以及两台电脑是否在同一局域网";
+    }
+    if (error == "network unreachable") {
+        return L"网络不可达，请检查两台电脑是否在同一局域网";
+    }
+    if (error == "host unreachable") {
+        return L"主机不可达，请确认对方仍在等待加入";
+    }
+    if (error == "host not found") {
+        return L"找不到该主机";
+    }
+    if (error == "port already in use") {
+        return L"该端口已被占用，请换一个端口";
+    }
+    if (error == "connection reset by peer") {
+        return L"连接被对方重置";
+    }
+    if (error == "peer disconnected") {
+        return L"对方已断开连接";
+    }
+    if (error == "peer left") {
+        return L"对方已离开";
+    }
+    if (error == "handshake timed out") {
+        return L"握手超时，请确认对方也在等待加入";
+    }
+    if (error == "protocol version mismatch") {
+        return L"双方程序版本不一致（协议版本不同）";
+    }
+    if (error == "role conflict") {
+        return L"双方角色冲突：两台都创建了房间";
+    }
+    return Widen(error);
 }
 
 void DrawTextAt(int x, int y, int size, COLORREF color, const wchar_t* text, const wchar_t* face) {
@@ -114,6 +177,8 @@ void DrawBoardToBuffer(const Game& game) {
         }
     }
     putimage(0, 0, &g_buffer);
+    // 右侧状态/控制区改为深色底，保证按钮与文字醒目
+    ui::DrawRightPanel();
 
     if (game.HistorySize() > 0) {
         const obgame::Move& last = game.History().back();
@@ -133,7 +198,7 @@ void ShowMessage(const std::wstring& title, const std::wstring& detail) {
     button.DrawButton();
     ExMessage message;
     while (true) {
-        getmessage(&message, EX_MOUSE);
+        ui::GetMessageMapped(&message, EX_MOUSE);
         if (message.message == WM_LBUTTONDOWN && HitButton(button, message.x, message.y)) {
             return;
         }

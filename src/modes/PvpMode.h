@@ -3,5 +3,5 @@
 
 #include "modes/ModeResult.h"
 
-// 人人对战窗口。返回 QuitGame 表示玩家在对局中选择直接退出游戏
+// 人人对战窗口。退出对局只返回主菜单，退出游戏统一走主菜单入口
 LeaveMatch PVPWindow();

@@ -46,6 +46,8 @@ public:
     void Close();
 
     bool Send(const Msg& msg);
+    // 发送一条聊天消息（UTF-8 文本，超长自动截断）
+    bool SendChat(const std::string& text);
 
     // 主线程侧非阻塞取消息
     bool Poll(Msg& msg);
@@ -56,6 +58,7 @@ public:
 
 private:
     void ReceiveLoop();
+    bool SendAll(const uint8_t* data, int size);
     void PushMessage(const Msg& msg);
     void SetError(const std::string& error);
     void CloseSocketQuietly(SOCKET& s);

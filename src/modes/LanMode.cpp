@@ -8,12 +8,14 @@
 #include "modes/LanSession.h"
 #include "modes/LanUi.h"
 
+#include "ui/Display.h"
+
 #include <string>
 
 using obnet::NetChannel;
 
 void OnlineBattleWindow() {
-    initgraph(kWindowW, kWindowH);
+    ui::EnsureDisplay();
     SetWindowText(GetHWnd(), L"连六棋 - 局域网对战");
     if (!LoadLanImages()) {
         ShowMessage(L"图片资源加载失败", L"请从工程目录（img 所在文件夹）运行程序");
@@ -30,37 +32,45 @@ void OnlineBattleWindow() {
         std::string error;
 
         if (choice == 1) {
-            if (!channel.StartServer(obnet::kDefaultPort, &error)) {
-                ShowMessage(L"创建房间失败", Widen(error));
+            uint16_t port = obnet::kDefaultPort;
+            if (!ShowCreateInput(port)) {
                 continue;
             }
-            if (!ShowHostWaiting(channel)) {
+            if (!channel.StartServer(port, &error)) {
+                ShowMessage(L"创建房间失败", DescribeNetError(error));
+                continue;
+            }
+            if (!ShowHostWaiting(channel, port)) {
                 continue;
             }
             channel.StartReceiveThread();
             if (!DoHandshake(channel, true, &error)) {
                 channel.Close();
-                ShowMessage(L"连接握手失败", Widen(error));
+                ShowMessage(L"连接握手失败", DescribeNetError(error));
                 continue;
             }
             RunSession(channel, true);
             channel.Close();
         } else {
             std::string ip;
-            if (!ShowJoinInput(ip)) {
+            uint16_t port = obnet::kDefaultPort;
+            if (!ShowJoinInput(ip, port)) {
                 continue;
             }
             DrawMenuBackground();
-            DrawTextCentered(kWindowW / 2, 250, 24, kTextRed, L"正在连接主机…");
+            const std::wstring endpoint = Widen(ip) + L":" + std::to_wstring(port);
+            DrawTextCentered(kWindowW / 2, 240, 26, kTextRed, (L"正在连接 " + endpoint + L" …").c_str());
+            DrawTextCentered(kWindowW / 2, 288, 18, kTextHint, L"最多等待 3 秒");
+            ui::Present();
             Sleep(80);
-            if (!channel.ConnectTo(ip, obnet::kDefaultPort, 3000, &error)) {
-                ShowMessage(L"连接失败", Widen(error));
+            if (!channel.ConnectTo(ip, port, 3000, &error)) {
+                ShowMessage(L"连接失败", DescribeNetError(error));
                 continue;
             }
             channel.StartReceiveThread();
             if (!DoHandshake(channel, false, &error)) {
                 channel.Close();
-                ShowMessage(L"连接握手失败", Widen(error));
+                ShowMessage(L"连接握手失败", DescribeNetError(error));
                 continue;
             }
             RunSession(channel, false);

@@ -18,6 +18,8 @@ const COLORREF kTextBlack = RGB(0, 0, 0);
 const COLORREF kTextRed = RGB(255, 0, 0);
 const COLORREF kButtonBg = RGB(208, 208, 208);
 const COLORREF kWhite = RGB(255, 255, 255);
+const COLORREF kFocusBorder = RGB(52, 120, 210); // 输入框获得焦点时的边框色
+const COLORREF kTextHint = RGB(96, 96, 96);      // 输入框内的灰色提示文字
 
 const wchar_t* const kFaceLi = L"隶书";
 const wchar_t* const kFaceYahei = L"微软雅黑";
@@ -31,6 +33,12 @@ extern IMAGE g_buffer;
 
 // UTF-8 转宽字符（用于把网络错误信息显示到界面）
 std::wstring Widen(const std::string& text);
+
+// 宽字符转 UTF-8（用于发送聊天消息）
+std::string Narrow(const std::wstring& text);
+
+// 把网络层的英文错误串翻译成界面可读的中文提示
+std::wstring DescribeNetError(const std::string& error);
 
 void DrawTextAt(int x, int y, int size, COLORREF color, const wchar_t* text, const wchar_t* face = kFaceYahei);
 void DrawTextCentered(int centerX, int y, int size, COLORREF color, const wchar_t* text, const wchar_t* face = kFaceYahei);

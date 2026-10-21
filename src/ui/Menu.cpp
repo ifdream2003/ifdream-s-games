@@ -4,6 +4,7 @@
 
 #include "ui/Assets.h"
 #include "ui/Button.h"
+#include "ui/Display.h"
 
 // 主菜单
 int MainMenu() {
@@ -33,9 +34,16 @@ int MainMenu() {
     btnLAN.DrawButton();
     btnExit.DrawButton();
 
+    // 窗口操作提示：窗口可自由放大缩小，F11 切全屏，Ctrl +/- 等比缩放
+    const wchar_t* hint = L"拖动窗口边框可放大缩小 · F11 全屏 · Ctrl + / - 缩放";
+    settextcolor(RGB(72, 84, 102));
+    setbkmode(TRANSPARENT);
+    settextstyle(16, 0, L"微软雅黑");
+    outtextxy((ui::kLogicalW - textwidth(hint)) / 2, 570, hint);
+
     MOUSEMSG m;
     while (true) {
-        m = GetMouseMsg();
+        m = ui::GetMouseMsgMapped();
         //检测点击
         if (m.uMsg == WM_LBUTTONDOWN) {
             if (btnPVP.IsMouseOnButton(m)) {

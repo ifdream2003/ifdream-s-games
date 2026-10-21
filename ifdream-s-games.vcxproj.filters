@@ -69,6 +69,9 @@
     <ClCompile Include="src\ui\BoardView.cpp">
       <Filter>src\ui</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\Display.cpp">
+      <Filter>src\ui</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\Dialogs.cpp">
       <Filter>src\ui</Filter>
     </ClCompile>
@@ -113,6 +116,9 @@
     <ClInclude Include="src\modes\PvpMode.h">
       <Filter>src\modes</Filter>
     </ClInclude>
+    <ClInclude Include="src\net\Endpoint.h">
+      <Filter>src\net</Filter>
+    </ClInclude>
     <ClInclude Include="src\net\Net.h">
       <Filter>src\net</Filter>
     </ClInclude>
@@ -128,6 +134,9 @@
     <ClInclude Include="src\ui\BoardView.h">
       <Filter>src\ui</Filter>
     </ClInclude>
+    <ClInclude Include="src\ui\Display.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
     <ClInclude Include="src\ui\Button.h">
       <Filter>src\ui</Filter>
     </ClInclude>
@@ -135,6 +144,9 @@
       <Filter>src\ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\Menu.h">
+      <Filter>src\ui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\Panel.h">
       <Filter>src\ui</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\Theme.h">

@@ -9,11 +9,13 @@
 #include "core/Rules.h"
 #include "ui/BoardView.h"
 #include "ui/Dialogs.h"
+#include "ui/Display.h"
+#include "ui/Panel.h"
 
 //人人对战窗口
 LeaveMatch PVPWindow() {
     gShowExitButton = true; // 对局中显示退出按钮
-    initgraph(808, 608);
+    ui::EnsureDisplay();
     HWND hnd = GetHWnd(); // 获取窗口句柄
     SetWindowText(hnd, L"连六棋"); // 设置窗口标题
     MOUSEMSG m;
@@ -30,6 +32,7 @@ LeaveMatch PVPWindow() {
         settextcolor(RGB(255, 0, 0));
         settextstyle(40, 0, L"隶书");
         outtextxy(200, 280, L"游戏开始！黑棋先行");
+        ui::Present();
         Sleep(1000);
         DrawBoard();
 
@@ -41,10 +44,10 @@ LeaveMatch PVPWindow() {
                 for (int i = 0; i < playerSetTimes  && !undoFlag; i++) {
                     settextstyle(20, 0, L"微软雅黑");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(618, 10, L"黑棋回合，请落子");
+                    ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"黑棋回合，请落子");
                     int col = -1, row = -1;
                     do {
-                        m = GetMouseMsg();
+                        m = ui::GetMouseMsgMapped();
 
                         // --- 检测是否点击了退出按钮 ---
                         if (m.uMsg == WM_LBUTTONDOWN && exitButton.IsMouseOnButton(m)) {
@@ -53,15 +56,11 @@ LeaveMatch PVPWindow() {
                                 gShowExitButton = false;
                                 return LeaveMatch::BackToMenu;
                             }
-                            if (choice == ExitChoice::QuitGame) {
-                                gShowExitButton = false;
-                                return LeaveMatch::QuitGame;
-                            }
                             // 继续游戏：重绘棋盘与回合提示，继续等待落子
                             DrawBoard();
                             settextstyle(20, 0, L"微软雅黑");
                             settextcolor(RGB(255, 0, 0));
-                            outtextxy(618, 10, L"黑棋回合，请落子");
+                            ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"黑棋回合，请落子");
                             continue;
                         }
 
@@ -77,11 +76,12 @@ LeaveMatch PVPWindow() {
                             else {
                                 settextstyle(20, 0, L"微软雅黑");
                                 settextcolor(RGB(255, 0, 0));
-                                outtextxy(620, 45, L"完成本回合后方可悔棋");
+                                ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 45, 17, ui::kPanelAccent, L"完成本回合后方可悔棋");
                             }
                         }
 
-                        if (m.uMsg == WM_LBUTTONDOWN) {
+                        // 落在黑边/窗口外时坐标为 -1，不能当成 (0,0) 落子
+                        if (m.uMsg == WM_LBUTTONDOWN && m.x >= 0 && m.y >= 0) {
                             col = m.x / 32;
                             row = m.y / 32;
                         }
@@ -100,14 +100,14 @@ LeaveMatch PVPWindow() {
                     if (result == 1) {
                         settextstyle(40, 0, L"隶书");
                         settextcolor(RGB(255, 0, 0));
-                        outtextxy(180, 280, L"黑棋胜利！");
+                        DrawResultOverlay(L"黑棋胜利！");
                         gameover = true;
                         break;
                     }
                     else if (result == 3) {
                         settextstyle(40, 0, L"隶书");
                         settextcolor(RGB(255, 0, 0));
-                        outtextxy(180, 280, L"和棋！");
+                        DrawResultOverlay(L"和棋！");
                         gameover = true;
                         break;
                     }
@@ -123,11 +123,11 @@ LeaveMatch PVPWindow() {
                 for (int i = 0; i < playerSetTimes  && !undoFlag; i++) {
                     settextstyle(20, 0, L"微软雅黑");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(618, 10, L"白棋回合，请落子");
+                    ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"白棋回合，请落子");
 
                     int col = -1, row = -1;
                     do {
-                        m = GetMouseMsg();
+                        m = ui::GetMouseMsgMapped();
                         // --- 检测是否点击了退出按钮 ---
                         if (m.uMsg == WM_LBUTTONDOWN && exitButton.IsMouseOnButton(m)) {
                             const ExitChoice choice = ShowExitConfirm();
@@ -135,15 +135,11 @@ LeaveMatch PVPWindow() {
                                 gShowExitButton = false;
                                 return LeaveMatch::BackToMenu;
                             }
-                            if (choice == ExitChoice::QuitGame) {
-                                gShowExitButton = false;
-                                return LeaveMatch::QuitGame;
-                            }
                             // 继续游戏：重绘棋盘与回合提示，继续等待落子
                             DrawBoard();
                             settextstyle(20, 0, L"微软雅黑");
                             settextcolor(RGB(255, 0, 0));
-                            outtextxy(618, 10, L"白棋回合，请落子");
+                            ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"白棋回合，请落子");
                             continue;
                         }
                         if (m.uMsg == WM_LBUTTONDOWN && undoButton.IsMouseOnButton(m)) {
@@ -166,11 +162,12 @@ LeaveMatch PVPWindow() {
                                 // 玩家未完成回合，提示并忽略点击
                                 settextstyle(20, 0, L"微软雅黑");
                                 settextcolor(RGB(255, 0, 0));
-                                outtextxy(620, 45, L"完成本回合后方可悔棋");
+                                ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 45, 17, ui::kPanelAccent, L"完成本回合后方可悔棋");
                             }
                         }
 
-                        if (m.uMsg == WM_LBUTTONDOWN) {
+                        // 落在黑边/窗口外时坐标为 -1，不能当成 (0,0) 落子
+                        if (m.uMsg == WM_LBUTTONDOWN && m.x >= 0 && m.y >= 0) {
                             col = m.x / 32;
                             row = m.y / 32;
                         }
@@ -189,14 +186,14 @@ LeaveMatch PVPWindow() {
                     if (result == 2) {
                         settextstyle(40, 0, L"隶书");
                         settextcolor(RGB(255, 0, 0));
-                        outtextxy(180, 280, L"白棋胜利！");
+                        DrawResultOverlay(L"白棋胜利！");
                         gameover = true;
                         break;
                     }
                     else if (result == 3) {
                         settextstyle(40, 0, L"隶书");
                         settextcolor(RGB(255, 0, 0));
-                        outtextxy(180, 280, L"和棋！");
+                        DrawResultOverlay(L"和棋！");
                         gameover = true;
                         break;
                     }
@@ -211,10 +208,6 @@ LeaveMatch PVPWindow() {
         if (endChoice == EndChoice::BackToMenu) {
             gShowExitButton = false;
             return LeaveMatch::BackToMenu;  // 用户选择退回主菜单
-        }
-        if (endChoice == EndChoice::QuitGame) {
-            gShowExitButton = false;
-            return LeaveMatch::QuitGame;    // 用户选择直接退出游戏
         }
         // 选择重新开始时继续下一局
     }

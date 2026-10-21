@@ -1,7 +1,10 @@
 ﻿#include "modes/PveMode.h"
 
+#include <atomic>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -13,13 +16,15 @@
 #include "core/Rules.h"
 #include "ui/BoardView.h"
 #include "ui/Dialogs.h"
+#include "ui/Display.h"
+#include "ui/Panel.h"
 
 using namespace std;
 
-// 人机对战窗口。返回 QuitGame 表示玩家在对局中选择直接退出游戏
+// 人机对战窗口。退出对局只返回主菜单，退出游戏统一走主菜单入口
 LeaveMatch PVCWindow() {
     gShowExitButton = true; // 对局中显示退出按钮
-    initgraph(808, 608);
+    ui::EnsureDisplay();
     HWND hnd = GetHWnd(); // 获取窗口句柄
     SetWindowText(hnd, L"连六棋"); // 设置窗口标题
     MOUSEMSG m;
@@ -34,6 +39,7 @@ LeaveMatch PVCWindow() {
         settextcolor(RGB(255, 0, 0));
         settextstyle(40, 0, L"隶书");
         outtextxy(200, 280, L"游戏开始！黑棋先行");
+        ui::Present();
         //让文字显示一段时间后在刷新棋盘
         Sleep(1000);
         DrawBoard();
@@ -43,14 +49,14 @@ LeaveMatch PVCWindow() {
             for (int i = 0; i < playerSetTimes; i++) {
                 settextstyle(20, 0, L"微软雅黑");
                 settextcolor(RGB(255, 0, 0));
-                outtextxy(618, 10, L"你的回合，请落子");
+                ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"你的回合，请落子");
                 settextstyle(40, 0, L"微软雅黑");
 
                 int col = -1, row = -1;
 
                 //这是阻塞式等待循环，我们在这里插入按钮检测
                 do {
-                    m = GetMouseMsg(); // 阻塞，等待鼠标消息
+                    m = ui::GetMouseMsgMapped(); // 阻塞，等待鼠标消息
                     // --- 检测是否点击了退出按钮 ---
                     if (m.uMsg == WM_LBUTTONDOWN && exitButton.IsMouseOnButton(m)) {
                         const ExitChoice choice = ShowExitConfirm();
@@ -58,15 +64,11 @@ LeaveMatch PVCWindow() {
                             gShowExitButton = false;
                             return LeaveMatch::BackToMenu;
                         }
-                        if (choice == ExitChoice::QuitGame) {
-                            gShowExitButton = false;
-                            return LeaveMatch::QuitGame;
-                        }
                         // 继续游戏：重绘棋盘和回合提示，继续等待落子
                         DrawBoard();
                         settextstyle(20, 0, L"微软雅黑");
                         settextcolor(RGB(255, 0, 0));
-                        outtextxy(618, 10, L"你的回合，请落子");
+                        ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"你的回合，请落子");
                         continue;
                     }
                     // --- 检测是否点击了悔棋按钮 ---
@@ -89,12 +91,13 @@ LeaveMatch PVCWindow() {
                             // 玩家未完成回合，提示并忽略点击
                             settextstyle(20, 0, L"微软雅黑");
                             settextcolor(RGB(255, 0, 0));
-                            outtextxy(620, 45, L"完成本回合后方可悔棋");
+                            ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 45, 17, ui::kPanelAccent, L"完成本回合后方可悔棋");
                         }
 
                     }
 
-                    if (m.uMsg == WM_LBUTTONDOWN) {
+                    // 落在黑边/窗口外时坐标为 -1，不能当成 (0,0) 落子
+                    if (m.uMsg == WM_LBUTTONDOWN && m.x >= 0 && m.y >= 0) {
                         col = m.x / 32;
                         row = m.y / 32;
                     }
@@ -116,14 +119,14 @@ LeaveMatch PVCWindow() {
                 if (result == 1) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"黑棋胜利！");
+                    DrawResultOverlay(L"黑棋胜利！");
                     gameover = true;
                     break; // 跳出 for 循环
                 }
                 else if (result == 3) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"和棋！");
+                    DrawResultOverlay(L"和棋！");
                     gameover = true;
                     break; // 跳出 for 循环
                 }
@@ -134,9 +137,65 @@ LeaveMatch PVCWindow() {
 
             settextstyle(20, 0, L"微软雅黑");
             settextcolor(RGB(255, 0, 0));
-            outtextxy(618, 10, L"AI思考中...");
-            
-            vector<pair<int, int>> aiMoves = aiput(board);
+            ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"AI思考中...");
+            // 先把玩家刚落的子呈现出来，别让界面看起来“点了没反应”
+            ui::Present();
+
+            // AI 搜索比较慢，放到后台线程算：主线程继续泵消息/重绘，
+            // 思考期间窗口和「退出」按钮依然可以响应，不会整页假死
+            struct BoardSnapshot {
+                int cells[BOARDSIZE][BOARDSIZE];
+            };
+            auto snapshot = std::make_shared<BoardSnapshot>();
+            memcpy(snapshot->cells, board, sizeof(snapshot->cells));
+            auto aiMovesPtr = std::make_shared<vector<pair<int, int>>>();
+            auto aiDone = std::make_shared<atomic<bool>>(false);
+            std::thread aiWorker([snapshot, aiMovesPtr, aiDone]() {
+                *aiMovesPtr = aiput(snapshot->cells);
+                aiDone->store(true);
+            });
+
+            bool leaveMatch = false;
+            while (!aiDone->load()) {
+                ui::Pump(); // 思考期间拖动窗口边框仍能实时缩放
+                ExMessage message;
+                while (ui::PeekMessageMapped(&message, EX_MOUSE)) {
+                    if (message.message != WM_LBUTTONDOWN) {
+                        continue;
+                    }
+                    MOUSEMSG probe;
+                    memset(&probe, 0, sizeof(probe));
+                    probe.uMsg = message.message;
+                    probe.x = static_cast<short>(message.x);
+                    probe.y = static_cast<short>(message.y);
+                    if (!exitButton.IsMouseOnButton(probe)) {
+                        continue;
+                    }
+                    const ExitChoice choice = ShowExitConfirm();
+                    if (choice == ExitChoice::BackToMenu) {
+                        leaveMatch = true;
+                        break;
+                    }
+                    DrawBoard();
+                    settextstyle(20, 0, L"微软雅黑");
+                    settextcolor(RGB(255, 0, 0));
+                    ui::DrawPanelText(ui::kPanelX + ui::kPanelPadding, 10, 20, ui::kPanelAccent, L"AI思考中...");
+                    ui::Present();
+                }
+                if (leaveMatch) {
+                    break;
+                }
+                Sleep(10);
+            }
+            if (leaveMatch) {
+                aiWorker.detach(); // 提前离开：后台结果丢弃，写入的是 shared_ptr，不会悬空
+                gShowExitButton = false;
+                return LeaveMatch::BackToMenu;
+            }
+            aiWorker.join();
+            vector<pair<int, int>> aiMoves = *aiMovesPtr;
+            flushmessage(EX_MOUSE); // 思考期间的点击直接丢弃，避免思考完突然落子
+
             if (aiMoves.size() < 2) {
                 cerr << "AI落子生成失败" << endl;
                 gameover = true;
@@ -152,14 +211,14 @@ LeaveMatch PVCWindow() {
                 if (result == 2) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"白棋胜利！");
+                    DrawResultOverlay(L"白棋胜利！");
                     gameover = true;
                     break;
                 }
                 else if (result == 3) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"和棋！");
+                    DrawResultOverlay(L"和棋！");
                     gameover = true;
                     break;
                 }
@@ -175,14 +234,14 @@ LeaveMatch PVCWindow() {
                 if (result == 2) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"白棋胜利！");
+                    DrawResultOverlay(L"白棋胜利！");
                     gameover = true;
                     break;
                 }
                 else if (result == 3) {
                     settextstyle(40, 0, L"隶书");
                     settextcolor(RGB(255, 0, 0));
-                    outtextxy(180, 280, L"和棋！");
+                    DrawResultOverlay(L"和棋！");
                     gameover = true;
                     break;
                 }
@@ -196,10 +255,6 @@ LeaveMatch PVCWindow() {
         if (endChoice == EndChoice::BackToMenu) {
             gShowExitButton = false;
             return LeaveMatch::BackToMenu;  // 用户选择退回主菜单
-        }
-        if (endChoice == EndChoice::QuitGame) {
-            gShowExitButton = false;
-            return LeaveMatch::QuitGame;    // 用户选择直接退出游戏
         }
         // 选择重新开始时继续下一局
     }

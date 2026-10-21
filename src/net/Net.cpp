@@ -279,16 +279,22 @@ void NetChannel::ReceiveLoop() {
         filled += static_cast<size_t>(received);
 
         size_t offset = 0;
-        while (filled - offset >= static_cast<size_t>(kMsgSize)) {
+        while (filled - offset >= 1) {
             Msg msg;
-            if (!DecodeMsg(buffer + offset, msg)) {
-                SetError("protocol error: unknown message type");
+            int consumed = 0;
+            const FrameResult result =
+                TryDecodeFrame(buffer + offset, static_cast<int>(filled - offset), msg, &consumed);
+            if (result == FrameResult::NeedMore) {
+                break;
+            }
+            if (result == FrameResult::Invalid) {
+                SetError("protocol error: invalid frame");
                 filled = 0;
                 offset = 0;
                 break;
             }
             PushMessage(msg);
-            offset += static_cast<size_t>(kMsgSize);
+            offset += static_cast<size_t>(consumed);
         }
         if (filled == 0) {
             break; // 协议错误，退出接收循环
@@ -302,22 +308,30 @@ void NetChannel::ReceiveLoop() {
 }
 
 bool NetChannel::Send(const Msg& msg) {
-    std::lock_guard<std::mutex> lock(sendMutex_);
-    if (sock_ == INVALID_SOCKET || !connected_.load()) {
-        return false;
-    }
     uint8_t buffer[kMsgSize];
     EncodeMsg(msg, buffer);
-    size_t sent = 0;
-    while (sent < static_cast<size_t>(kMsgSize)) {
-        const int rc = send(sock_, reinterpret_cast<const char*>(buffer) + sent,
-                            static_cast<int>(kMsgSize - sent), 0);
+    return SendAll(buffer, kMsgSize);
+}
+
+bool NetChannel::SendChat(const std::string& text) {
+    const std::vector<uint8_t> frame = EncodeChatFrame(text);
+    return SendAll(frame.data(), static_cast<int>(frame.size()));
+}
+
+bool NetChannel::SendAll(const uint8_t* data, int size) {
+    std::lock_guard<std::mutex> lock(sendMutex_);
+    if (sock_ == INVALID_SOCKET || !connected_.load() || data == nullptr || size <= 0) {
+        return false;
+    }
+    int sent = 0;
+    while (sent < size) {
+        const int rc = send(sock_, reinterpret_cast<const char*>(data + sent), size - sent, 0);
         if (rc <= 0) {
             SetError(SocketErrorMessage(WSAGetLastError()));
             connected_.store(false);
             return false;
         }
-        sent += static_cast<size_t>(rc);
+        sent += rc;
     }
     return true;
 }
