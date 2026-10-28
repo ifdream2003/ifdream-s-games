@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\ai\Evaluator.cpp" />
+    <ClCompile Include="src\ai\LegacyAi.cpp" />
     <ClCompile Include="src\ai\Search.cpp" />
     <ClCompile Include="src\core\GameState.cpp" />
     <ClCompile Include="src\core\Rules.cpp" />
@@ -169,7 +170,9 @@
     <ClCompile Include="src\ui\Menu.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\ai\Engine.h" />
     <ClInclude Include="src\ai\Evaluator.h" />
+    <ClInclude Include="src\ai\LegacyAi.h" />
     <ClInclude Include="src\ai\Search.h" />
     <ClInclude Include="src\core\GameState.h" />
     <ClInclude Include="src\core\GameTypes.h" />

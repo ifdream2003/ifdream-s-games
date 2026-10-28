@@ -4,9 +4,8 @@
 
 #include "core/GameState.h"
 #include "ui/Assets.h"
+#include "ui/Display.h"
 #include "ui/Panel.h"
-
-#pragma comment(lib, "MSIMG32.LIB")
 
 bool gShowExitButton = false; // 仅人机对战页显示并响应退出按钮
 // 右侧控制区按钮：与局域网对战保持一致（面板宽 200px，按钮 160 宽居中，左右各留 20px）
@@ -32,40 +31,25 @@ void HideUndoButton() {
                    kPanelButtonX + kPanelButtonW, kUndoButtonY + kPanelButtonH);
 }
 
-inline void putimage_alpha(int x, int y, IMAGE* img, IMAGE* dest = NULL) {
-    HDC hdcDest = dest ? GetImageHDC(dest) : GetImageHDC(NULL);
-    HDC hdcSrc = GetImageHDC(img);
-
-    int w = img->getwidth();
-    int h = img->getheight();
-
-    AlphaBlend(
-        hdcDest, x, y, w, h,
-        hdcSrc, 0, 0, w, h,
-        { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA }
-    );
-}
-
-//打印棋盘
+// 打印棋盘
 void DrawBoard() {
-    // 绘制背景到缓冲区
-    putimage_alpha(0, 0, &back, &buffer);
+    // 背景（超采样画布上是 1:1 贴图，由 Display 负责缩放/对齐）
+    ui::DrawCanvasImage(&back);
 
-    // 绘制棋子到缓冲区
+    // 绘制棋子：逻辑坐标 × 超采样倍数由 Display 处理
     for (int i = 0; i < 19; i++) {
         for (int j = 0; j < 19; j++) {
-            int x = j * 32;
-            int y = i * 32;
+            const int x = j * 32;
+            const int y = i * 32;
             if (board[i][j] == 1) {
-                putimage_alpha(x, y, &black, &buffer);
+                ui::DrawCanvasImageAlpha(&black, x, y);
             }
             else if (board[i][j] == 2) {
-                putimage_alpha(x, y, &white, &buffer);
+                ui::DrawCanvasImageAlpha(&white, x, y);
             }
         }
     }
-    // 将缓冲区绘制到屏幕
-    putimage(0, 0, &buffer);
+
     // 右侧状态/控制区改为深色底，保证按钮与文字醒目
     ui::DrawRightPanel();
     undoButton.setFont(L"隶书");

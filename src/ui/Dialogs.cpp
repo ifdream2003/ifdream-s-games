@@ -12,26 +12,14 @@
 
 // 半透明压暗整个窗口，让确认框成为视觉焦点
 void DrawDimOverlay() {
-    IMAGE dim(808, 608);
-    IMAGE* previous = GetWorkingImage();
-    SetWorkingImage(&dim);
-    setfillcolor(RGB(0, 0, 0));
-    solidrectangle(0, 0, 808, 608);
-    SetWorkingImage(previous);
-
-    BLENDFUNCTION blend = {};
-    blend.BlendOp = AC_SRC_OVER;
-    blend.SourceConstantAlpha = 120;
-    blend.AlphaFormat = 0;
-    AlphaBlend(GetImageHDC(previous), 0, 0, 808, 608,
-        GetImageHDC(&dim), 0, 0, 808, 608, blend);
+    ui::DimCanvas(120);
 }
 
 // 对局中弹出模态确认框：继续游戏 / 返回菜单（menuText 可换成「返回大厅」），Esc 同「继续游戏」
 ExitChoice ShowExitConfirm(const wchar_t* menuText) {
     // 记录弹框出现前的画面，Esc 取消时原样恢复
-    IMAGE snapshot(808, 608);
-    getimage(&snapshot, 0, 0, 808, 608);
+    IMAGE snapshot(ui::kCanvasW, ui::kCanvasH);
+    ui::SnapshotCanvas(&snapshot);
     DrawDimOverlay();
 
     // 确认面板
@@ -80,7 +68,7 @@ ExitChoice ShowExitConfirm(const wchar_t* menuText) {
             continue;
         }
         if (m.message == WM_KEYDOWN && m.vkcode == VK_ESCAPE) {
-            putimage(0, 0, &snapshot);
+            ui::RestoreCanvas(&snapshot);
             ui::Present();
             return ExitChoice::Resume;
         }
@@ -88,7 +76,7 @@ ExitChoice ShowExitConfirm(const wchar_t* menuText) {
             continue;
         }
         if (hit(btnResume, m.x, m.y)) {
-            putimage(0, 0, &snapshot);
+            ui::RestoreCanvas(&snapshot);
             ui::Present();
             return ExitChoice::Resume;
         }

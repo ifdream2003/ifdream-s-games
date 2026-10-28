@@ -11,8 +11,6 @@
 #include "ui/Display.h"
 #include "ui/Panel.h"
 
-#pragma comment(lib, "msimg32.lib")
-
 using obgame::Game;
 
 // 与原版 main.cpp LoadImages/DrawBoard 使用同一套图片
@@ -20,7 +18,6 @@ IMAGE g_menuBg;
 IMAGE g_boardBack;
 IMAGE g_blackStone;
 IMAGE g_whiteStone;
-IMAGE g_buffer(kWindowW, kWindowH);
 static bool g_imagesReady = false;
 
 std::wstring Widen(const std::string& text) {
@@ -128,27 +125,11 @@ bool HitButton(const Button& button, int x, int y) {
     return button.IsMouseOnButton(message);
 }
 
-static void putimage_alpha(int x, int y, IMAGE* image, IMAGE* dest = nullptr) {
-    HDC destDc = dest ? GetImageHDC(dest) : GetImageHDC(nullptr);
-    HDC srcDc = GetImageHDC(image);
-    const int width = image->getwidth();
-    const int height = image->getheight();
-    if (width <= 0 || height <= 0) {
-        return;
-    }
-    BLENDFUNCTION blend;
-    blend.BlendOp = AC_SRC_OVER;
-    blend.BlendFlags = 0;
-    blend.SourceConstantAlpha = 255;
-    blend.AlphaFormat = AC_SRC_ALPHA;
-    AlphaBlend(destDc, x, y, width, height, srcDc, 0, 0, width, height, blend);
-}
-
 bool LoadLanImages() {
     if (g_imagesReady) {
         return true;
     }
-    loadimage(&g_menuBg, AssetPath(L"menu.png").c_str());
+    loadimage(&g_menuBg, AssetPath(L"menu.jpg").c_str());
     loadimage(&g_boardBack, AssetPath(L"board.png").c_str());
     loadimage(&g_blackStone, AssetPath(L"black.png").c_str());
     loadimage(&g_whiteStone, AssetPath(L"white.png").c_str());
@@ -161,22 +142,21 @@ bool LoadLanImages() {
 }
 
 void DrawMenuBackground() {
-    putimage(0, 0, &g_menuBg);
+    ui::DrawCanvasImage(&g_menuBg);
 }
 
 void DrawBoardToBuffer(const Game& game) {
-    putimage_alpha(0, 0, &g_boardBack, &g_buffer);
+    ui::DrawCanvasImage(&g_boardBack);
     for (int y = 0; y < obnet::kBoardSize; ++y) {
         for (int x = 0; x < obnet::kBoardSize; ++x) {
             const int stone = game.StoneAt(x, y);
             if (stone == 1) {
-                putimage_alpha(x * kCellSize, y * kCellSize, &g_blackStone, &g_buffer);
+                ui::DrawCanvasImageAlpha(&g_blackStone, x * kCellSize, y * kCellSize);
             } else if (stone == 2) {
-                putimage_alpha(x * kCellSize, y * kCellSize, &g_whiteStone, &g_buffer);
+                ui::DrawCanvasImageAlpha(&g_whiteStone, x * kCellSize, y * kCellSize);
             }
         }
     }
-    putimage(0, 0, &g_buffer);
     // 右侧状态/控制区改为深色底，保证按钮与文字醒目
     ui::DrawRightPanel();
 

@@ -3,11 +3,39 @@
 #include <algorithm>
 #include <cstring>
 
+#pragma comment(lib, "MSIMG32.LIB")
+
 namespace ui {
 
 namespace {
 
-IMAGE g_canvas(kLogicalW, kLogicalH);
+IMAGE g_canvas(kCanvasW, kCanvasH);
+
+// 画布按 kSupersample 倍超采样绘制；切到窗口/帧缓冲做 1:1 拷贝时要临时恢复 1 倍
+void ApplyCanvasAspect() {
+    setaspectratio(static_cast<float>(kSupersample), static_cast<float>(kSupersample));
+}
+void ApplyPixelAspect() {
+    setaspectratio(1.0f, 1.0f);
+}
+
+// 1:1 位图拷贝（GDI 的 StretchBlt / BitBlt / AlphaBlend）的前后处理。
+// EasyX 的超采样是靠 setaspectratio 作用在“当前绘图设备”的 DC 上实现的，而 GDI 的位图
+// 拷贝在源、目标 DC 的纵横比不一致时行为不可靠：源画布仍带 3 倍纵横比时，StretchBlt 会把
+// 目标矩形按 1/kSupersample 缩小，整屏画面缩到窗口左上角、其余区域全黑。
+// 所以拷贝前把画布 DC 恢复 1:1，拷贝后再切回 3 倍。
+IMAGE* BeginCanvasBlit() {
+    IMAGE* previous = GetWorkingImage();
+    SetWorkingImage(&g_canvas);
+    ApplyPixelAspect();
+    return previous;
+}
+void EndCanvasBlit(IMAGE* previous) {
+    SetWorkingImage(&g_canvas);
+    ApplyCanvasAspect();
+    SetWorkingImage(previous);
+}
+
 bool g_initialized = false;
 bool g_fullscreen = false; // 默认窗口模式：拖拽边框即可放大缩小
 HWND g_hwnd = nullptr;
@@ -246,6 +274,7 @@ void EnsureDisplay() {
         return;
     }
     SetWorkingImage(&g_canvas);
+    ApplyCanvasAspect();
 }
 
 void InitDisplay() {
@@ -260,6 +289,7 @@ void InitDisplay() {
                        g_fullscreen ? ScreenH() : g_windowH);
     ApplyWindowMode();
     SetWorkingImage(&g_canvas);
+    ApplyCanvasAspect();
     g_initialized = true;
 }
 
@@ -318,6 +348,7 @@ void SetFullscreen(bool enabled) {
         SetForegroundWindow(g_hwnd); // 重建窗口后把焦点拿回来，Esc / 回车等按键继续有效
     }
     SetWorkingImage(&g_canvas);
+    ApplyCanvasAspect();
     Present();
 }
 
@@ -390,24 +421,28 @@ void Present() {
     if (g_frame == nullptr) {
         return;
     }
-    IMAGE* previous = GetWorkingImage();
+    // 源画布 DC 必须先恢复 1:1，否则 StretchBlt 会把画面缩成左上角一小块（见 BeginCanvasBlit）
+    IMAGE* previous = BeginCanvasBlit();
+    HDC dstDc = GetImageHDC(g_frame);
+    HDC srcDc = GetImageHDC(&g_canvas);
+
     SetWorkingImage(g_frame);
+    ApplyPixelAspect();
     setfillcolor(RGB(0, 0, 0));
     solidrectangle(0, 0, layout.winW, layout.winH);
     if (layout.w > 0 && layout.h > 0) {
-        // EasyX 的 putimage 缩放重载在部分版本不生效，这里用 GDI 拉伸
-        HDC dstDc = GetImageHDC(g_frame);
-        HDC srcDc = GetImageHDC(&g_canvas);
+        // 先把超采样画布按 HALFTONE 缩放到窗口帧缓冲（1:1 时不会有二次缩放）
         SetStretchBltMode(dstDc, HALFTONE);
         SetBrushOrgEx(dstDc, 0, 0, nullptr);
         StretchBlt(dstDc, layout.x, layout.y, layout.w, layout.h,
-                   srcDc, 0, 0, kLogicalW, kLogicalH, SRCCOPY);
+                   srcDc, 0, 0, kCanvasW, kCanvasH, SRCCOPY);
     }
     SetWorkingImage(nullptr);
+    ApplyPixelAspect();
     BeginBatchDraw();
     putimage(0, 0, g_frame);
     EndBatchDraw();
-    SetWorkingImage(previous);
+    EndCanvasBlit(previous);
     g_presentW = layout.winW;
     g_presentH = layout.winH;
 }
@@ -427,6 +462,90 @@ void Pump() {
     if (cw != g_presentW || ch != g_presentH) {
         Present();
     }
+}
+
+// ---------------------------------------------------------------------------
+// 超采样画布上的图片绘制 / 快照工具
+// 说明：这些工具都在画布上做 1:1 位图拷贝，必须先用 BeginCanvasBlit() 把画布 DC
+// 恢复成 1:1，拷贝完再用 EndCanvasBlit() 切回 kSupersample。
+// ---------------------------------------------------------------------------
+
+void DrawCanvasImage(const IMAGE* image) {
+    if (image == nullptr || image->getwidth() <= 0 || image->getheight() <= 0) {
+        return;
+    }
+    IMAGE* previous = BeginCanvasBlit();
+    HDC dst = GetImageHDC(&g_canvas);
+    HDC src = GetImageHDC(const_cast<IMAGE*>(image));
+    SetStretchBltMode(dst, HALFTONE);
+    SetBrushOrgEx(dst, 0, 0, nullptr);
+    StretchBlt(dst, 0, 0, kCanvasW, kCanvasH,
+               src, 0, 0, image->getwidth(), image->getheight(), SRCCOPY);
+    EndCanvasBlit(previous);
+}
+
+void DrawCanvasImageAlpha(const IMAGE* image, int logicalX, int logicalY) {
+    if (image == nullptr) {
+        return;
+    }
+    const int w = image->getwidth();
+    const int h = image->getheight();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    IMAGE* previous = BeginCanvasBlit();
+    HDC dst = GetImageHDC(&g_canvas);
+    HDC src = GetImageHDC(const_cast<IMAGE*>(image));
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+    AlphaBlend(dst, logicalX * kSupersample, logicalY * kSupersample, w, h,
+               src, 0, 0, w, h, blend);
+    EndCanvasBlit(previous);
+}
+
+void SnapshotCanvas(IMAGE* snapshot) {
+    if (snapshot == nullptr) {
+        return;
+    }
+    IMAGE* previous = BeginCanvasBlit();
+    HDC dst = GetImageHDC(snapshot);
+    HDC src = GetImageHDC(&g_canvas);
+    BitBlt(dst, 0, 0, kCanvasW, kCanvasH, src, 0, 0, SRCCOPY);
+    EndCanvasBlit(previous);
+}
+
+void RestoreCanvas(const IMAGE* snapshot) {
+    if (snapshot == nullptr) {
+        return;
+    }
+    IMAGE* previous = BeginCanvasBlit();
+    HDC dst = GetImageHDC(&g_canvas);
+    HDC src = GetImageHDC(const_cast<IMAGE*>(snapshot));
+    BitBlt(dst, 0, 0, kCanvasW, kCanvasH, src, 0, 0, SRCCOPY);
+    EndCanvasBlit(previous);
+}
+
+void DimCanvas(int alpha) {
+    IMAGE dim(kCanvasW, kCanvasH);
+    IMAGE* previous = BeginCanvasBlit();
+
+    // 遮罩图本身也按 1:1 涂黑（新 IMAGE 的纵横比默认就是 1 倍）
+    SetWorkingImage(&dim);
+    ApplyPixelAspect();
+    setfillcolor(RGB(0, 0, 0));
+    solidrectangle(0, 0, kCanvasW, kCanvasH);
+
+    SetWorkingImage(&g_canvas);
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = static_cast<BYTE>(alpha < 0 ? 0 : (alpha > 255 ? 255 : alpha));
+    blend.AlphaFormat = 0;
+    AlphaBlend(GetImageHDC(&g_canvas), 0, 0, kCanvasW, kCanvasH,
+               GetImageHDC(&dim), 0, 0, kCanvasW, kCanvasH, blend);
+
+    EndCanvasBlit(previous);
 }
 
 bool MapWindowPoint(int winX, int winY, int* logicalX, int* logicalY) {

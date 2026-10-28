@@ -2,7 +2,7 @@
 
 #include <windows.h>
 
-IMAGE white, black, menu, back, buffer(WINDOW_WIDTH, WINDOW_HEIGHT);
+IMAGE white, black, menu, back;
 
 // 返回 exe 同目录下 assets/<fileName> 的绝对路径。
 // 构建后会把 assets/ 复制到输出目录，因此程序可以从任意工作目录启动。
@@ -24,6 +24,6 @@ std::wstring AssetPath(const wchar_t* fileName) {
 void LoadImages() {
     loadimage(&white, AssetPath(L"white.png").c_str());
     loadimage(&black, AssetPath(L"black.png").c_str());
-    loadimage(&menu, AssetPath(L"menu.png").c_str());
+    loadimage(&menu, AssetPath(L"menu.jpg").c_str());
     loadimage(&back, AssetPath(L"board.png").c_str());
 }

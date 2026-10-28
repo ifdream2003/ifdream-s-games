@@ -8,7 +8,7 @@
 
 // 主菜单
 int MainMenu() {
-    putimage(0, 0, &menu);
+    ui::DrawCanvasImage(&menu);
 
     //需要一个“连六棋”大字标题
     settextcolor(RGB(0, 0, 0));

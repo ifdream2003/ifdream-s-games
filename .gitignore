@@ -1,7 +1,6 @@
 # Visual Studio 用户文件与缓存
 /.vs/
 *.user
-/tests/
 
 # 构建输出
 /x64/

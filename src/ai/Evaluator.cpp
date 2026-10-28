@@ -1,288 +1,267 @@
 ﻿#include "ai/Evaluator.h"
 
 #include <cstdlib>
-#include <cstring>
-#include <map>
-#include <string>
-#include <utility>
 
-#include "core/GameState.h"
-#include "core/Rules.h"
+#include "ai/Engine.h"
 
-using namespace std;
+using namespace c6;
 
 namespace {
 
-struct PatternScore {
-    const char* text;
-    int score;
-};
-
-struct ScoredMove {
-    int score;
-    int x;
-    int y;
-};
-
-// AI 视角的棋形评分表
-const PatternScore kAiPatterns[] = {
-    // AI的强进攻棋形
-    {"222222", 200000}, // AI六连
-    {"22222", 90000},   // AI五连
-    {"202222", 40000},
-    {"222022", 40000},
-    {"220222", 40000},
-    {"222202", 40000},
-    {"2222", 30000},
-    {"20222", 20000},
-    {"22202", 20000},
-    {"22022", 20000},
-    {"222002", 10000},
-    {"220022", 10000},
-    {"200222", 10000},
-
-    // AI的弱进攻棋形
-    {"222", 500}, // AI活三
-    {"22", 100},  // AI活二
-
-    // ai防守棋形
-    {"2111", 600},      // 阻挡玩家活三
-    {"211", 150},       // 阻挡玩家活二
-    {"211111", 50000},  // 阻挡玩家五连
-    {"21111", 45000},   // 阻挡玩家冲四
-};
-const int kAiPatternCount = static_cast<int>(sizeof(kAiPatterns) / sizeof(kAiPatterns[0]));
-
-// 玩家视角的棋形评分表（负分越小越危险）
-const PatternScore kPlayerPatterns[] = {
-    // 【中优先级】玩家自身进攻（优先级低于防守AI高危）
-    {"111111", -200000}, // 玩家六连（必胜）
-    {"11111", -90000},   // 玩家五连（下一步必胜）
-
-    // 玩家的绝对优势棋形
-    {"101111", -40000}, // 玩家活四
-    {"111011", -40000},
-    {"110111", -40000},
-    {"111101", -40000},
-
-    // 玩家的强进攻棋形
-    {"1111", -30000},  // 玩家四连
-    {"10111", -20000}, // 玩家冲四
-    {"11101", -20000},
-    {"11011", -20000},
-
-    // 玩家的中等进攻棋形
-    {"111001", -10000}, // 玩家眠四
-    {"110011", -10000},
-    {"100111", -10000},
-
-    // 玩家的弱进攻棋形
-    {"111", -500}, // 玩家活三
-    {"11", -100},  // 玩家活二
-
-    // --- 【AI防守棋形】---
-    {"1222", -650},       // 阻挡AI活三
-    {"122", -150},        // 阻挡AI活二
-    {"122222", -50000},   // 阻挡AI五连
-    {"12222", -45000},    // 阻挡AI冲四
-};
-const int kPlayerPatternCount = static_cast<int>(sizeof(kPlayerPatterns) / sizeof(kPlayerPatterns[0]));
-
-// 8 条线的方向：左、右、上、下、左上、右下、右上、左下（与 core::getChessLines 顺序一致）
-const int kDirs[8][2] = {
-    {-1, 0}, {1, 0}, {0, -1}, {0, 1},
-    {-1, -1}, {1, 1}, {1, -1}, {-1, 1}
-};
-
-// 与 core::getChessLines 等价：从 (x,y) 沿 8 个方向各取最多 7 格（含自身），
-// 改用固定缓冲区，避免每个候选点都分配 std::string
-void BuildChessLines(int x, int y, int tempboard[BOARDSIZE][BOARDSIZE], char lines[8][8]) {
-    const int range = 7;
-    for (int d = 0; d < 8; ++d) {
-        int cx = x;
-        int cy = y;
-        int n = 0;
-        while (n < range && cx >= 0 && cx < BOARDSIZE && cy >= 0 && cy < BOARDSIZE) {
-            lines[d][n++] = static_cast<char>('0' + tempboard[cy][cx]);
-            cx += kDirs[d][0];
-            cy += kDirs[d][1];
+inline bool ContainsCell(const int* list, int n, int cell) {
+    for (int i = 0; i < n; ++i) {
+        if (list[i] == cell) {
+            return true;
         }
-        lines[d][n] = '\0';
     }
+    return false;
 }
 
-// 与 core::getPattern 等价的棋形归一化，只是写进固定缓冲区（最多 7 个字符）
-void NormalizePattern(const char* line, char* out) {
-    const int len = static_cast<int>(strlen(line));
-    const char base = line[0];
-    const char opponent = (base == '2') ? '1' : '2';
-    int n = 0;
-    int i = 1;
-    out[n++] = base;
-    if (len > 1) {
-        if (line[1] == base) {
-            while (i < len && line[i] == base) {
-                out[n++] = line[i++];
-            }
-            if (i < len && line[i] == '0') {
-                while (i < len && line[i] == '0') {
-                    out[n++] = line[i++];
-                }
-                if (i < len && line[i] == base) {
-                    while (i < len && line[i] == base) {
-                        out[n++] = line[i++];
-                    }
-                }
-            }
-        } else {
-            if (line[i] == '0') {
-                while (i < len && line[i] == '0') {
-                    out[n++] = line[i++];
-                }
-                if (i < len && line[i] == base) {
-                    while (i < len && line[i] == base) {
-                        out[n++] = line[i++];
-                    }
-                }
-            } else if (line[i] == opponent) {
-                while (i < len && line[i] == opponent) {
-                    out[n++] = line[i++];
-                }
-            }
-        }
+// 单个空位对某条线形成的棋形价值（走法排序用的启发值，不是局面评估）
+inline int PatternValue(int run, bool openLeft, bool openRight) {
+    const int open = (openLeft ? 1 : 0) + (openRight ? 1 : 0);
+    if (run >= 6) {
+        return 300000;
     }
-    out[n] = '\0';
+    if (run == 5) {
+        return 40000;
+    }
+    if (run == 4) {
+        return open * 5000;
+    }
+    if (run == 3) {
+        return open * 600;
+    }
+    if (run == 2) {
+        return open * 40;
+    }
+    return open * 4;
 }
 
-// 复刻原实现的打分：8 条线归一化后，用棋形串做子串匹配并累加分数
-int ScoreCell(int x, int y, int tempboard[BOARDSIZE][BOARDSIZE],
-              const PatternScore* patterns, int patternCount, bool* foundPattern) {
-    char lines[8][8];
-    BuildChessLines(x, y, tempboard, lines);
-    int total = 0;
-    *foundPattern = false;
-    for (int d = 0; d < 8; ++d) {
-        char normalized[8];
-        NormalizePattern(lines[d], normalized);
-        for (int p = 0; p < patternCount; ++p) {
-            if (strstr(normalized, patterns[p].text) != nullptr) {
-                total += patterns[p].score;
-                *foundPattern = true;
-            }
-        }
+// 假设 color 在 cell 落子，沿某个方向的棋形价值
+inline int DirectionValue(const Position& p, int x, int y, int d, int color) {
+    const int dx = kDirX[d];
+    const int dy = kDirY[d];
+    int a = 0;
+    int b = 0;
+    int cx = x + dx;
+    int cy = y + dy;
+    while (InBoard(cx, cy) && p.cell[CellIndex(cx, cy)] == color) {
+        ++a;
+        cx += dx;
+        cy += dy;
     }
-    return total;
-}
+    const bool openRight = InBoard(cx, cy) && p.cell[CellIndex(cx, cy)] == 0;
 
-// 只评估已有棋子周围 2 格内的空位：远离战场的点没有棋形价值，
-// 这是把候选点从 361 个压下来的关键优化
-void MarkCandidates(int tempboard[BOARDSIZE][BOARDSIZE], bool candidates[BOARDSIZE][BOARDSIZE]) {
-    memset(candidates, 0, sizeof(bool) * BOARDSIZE * BOARDSIZE);
-    bool hasStone = false;
-    for (int y = 0; y < BOARDSIZE; ++y) {
-        for (int x = 0; x < BOARDSIZE; ++x) {
-            if (tempboard[y][x] == 0) {
-                continue;
-            }
-            hasStone = true;
-            for (int dy = -2; dy <= 2; ++dy) {
-                for (int dx = -2; dx <= 2; ++dx) {
-                    const int nx = x + dx;
-                    const int ny = y + dy;
-                    if (nx >= 0 && nx < BOARDSIZE && ny >= 0 && ny < BOARDSIZE) {
-                        candidates[ny][nx] = true;
-                    }
-                }
-            }
-        }
+    cx = x - dx;
+    cy = y - dy;
+    while (InBoard(cx, cy) && p.cell[CellIndex(cx, cy)] == color) {
+        ++b;
+        cx -= dx;
+        cy -= dy;
     }
-    if (!hasStone) {
-        for (int y = 0; y < BOARDSIZE; ++y) {
-            for (int x = 0; x < BOARDSIZE; ++x) {
-                candidates[y][x] = true;
-            }
-        }
-    }
-}
+    const bool openLeft = InBoard(cx, cy) && p.cell[CellIndex(cx, cy)] == 0;
 
-// 维护前 TOP_N 个候选点（keepHigh 为真取最高分，否则取最低分）
-void PushBest(ScoredMove best[TOP_N], int* count, int score, int x, int y, bool keepHigh) {
-    int pos = *count;
-    if (*count < TOP_N) {
-        ++(*count);
-    } else {
-        pos = 0;
-        for (int i = 1; i < TOP_N; ++i) {
-            if (keepHigh ? best[i].score < best[pos].score : best[i].score > best[pos].score) {
-                pos = i;
-            }
-        }
-        if (keepHigh ? score <= best[pos].score : score >= best[pos].score) {
-            return;
-        }
-    }
-    best[pos].score = score;
-    best[pos].x = x;
-    best[pos].y = y;
-}
-
-multimap<int, pair<int, int>> EvaluateMoves(int tempboard[][BOARDSIZE],
-                                            const PatternScore* patterns, int patternCount,
-                                            int stone, bool keepHigh, bool subtractCenter) {
-    bool candidates[BOARDSIZE][BOARDSIZE];
-    MarkCandidates(tempboard, candidates);
-
-    const int center = BOARDSIZE / 2;
-    ScoredMove best[TOP_N];
-    int count = 0;
-
-    for (int y = 0; y < BOARDSIZE; ++y) { // 注意：y 是行，x 是列
-        for (int x = 0; x < BOARDSIZE; ++x) {
-            if (!candidates[y][x] || !isValid(x, y, tempboard)) {
-                continue;
-            }
-            // 模拟落子
-            tempboard[y][x] = stone;
-            bool foundPattern = false;
-            int totalScore = ScoreCell(x, y, tempboard, patterns, patternCount, &foundPattern);
-            // 撤销模拟落子
-            tempboard[y][x] = 0;
-
-            if (!foundPattern) {
-                const int centerScore = BOARDSIZE - (abs(center - y) + abs(center - x));
-                totalScore += subtractCenter ? -centerScore : centerScore;
-            }
-            PushBest(best, &count, totalScore, x, y, keepHigh);
-        }
-    }
-
-    multimap<int, pair<int, int>> result;
-    for (int i = 0; i < count; ++i) {
-        result.insert({ best[i].score, { best[i].x, best[i].y } });
-    }
-    return result;
+    // 注意：只在候选点为空时调用，中心格算 1
+    return PatternValue(a + b + 1, openLeft, openRight);
 }
 
 } // namespace
 
-// ai落子评估函数
-multimap<int, pair<int, int>> aiMove(int tempboard[][BOARDSIZE], int step) {
-    PatternScore patterns[kAiPatternCount];
-    memcpy(patterns, kAiPatterns, sizeof(patterns));
-    if (step == 1) {
-        patterns[kAiPatternCount - 1] = { "211111", 65000 };
-        patterns[kAiPatternCount - 2] = { "21111", 60000 };
+namespace c6 {
+
+int CellOrderScore(const Position& p, int cell, int color) {
+    const int x = CellX(cell);
+    const int y = CellY(cell);
+    int score = 0;
+    for (int d = 0; d < 4; ++d) {
+        score += DirectionValue(p, x, y, d, color) * 2;
+        score += DirectionValue(p, x, y, d, 3 - color);
     }
-    return EvaluateMoves(tempboard, patterns, kAiPatternCount, 2, true, false);
+    // 略微偏向中心
+    score += 18 - (std::abs(x - kBoard / 2) + std::abs(y - kBoard / 2));
+    return score;
 }
 
-// 玩家落子评估函数
-multimap<int, pair<int, int>> playerMove(int tempboard[][BOARDSIZE], int step) {
-    PatternScore patterns[kPlayerPatternCount];
-    memcpy(patterns, kPlayerPatterns, sizeof(patterns));
-    if (step == 3) {
-        patterns[kPlayerPatternCount - 1] = { "122222", -65000 };
-        patterns[kPlayerPatternCount - 2] = { "12222", -60000 };
+int CollectThreatCells(const Position& p, int color, int* out, int maxOut) {
+    int n = 0;
+    for (int i = 0; i < p.winListLen[color] && n < maxOut; ++i) {
+        const int cell = p.winList[color][i];
+        if (!ContainsCell(out, n, cell)) {
+            out[n++] = cell;
+        }
     }
-    return EvaluateMoves(tempboard, patterns, kPlayerPatternCount, 1, false, true);
+    const int nFour = p.fourListLen[color];
+    for (int i = 0; i < nFour && n < maxOut; ++i) {
+        int empties[2];
+        if (FourWindowEmpties(p, p.fourList[color][i], empties) != 2) {
+            continue;
+        }
+        for (int e = 0; e < 2; ++e) {
+            if (!ContainsCell(out, n, empties[e]) && n < maxOut) {
+                out[n++] = empties[e];
+            }
+        }
+    }
+    return n;
 }
+
+int DefenseNeed(const Position& p, int color, int k, int* cover) {
+    const int nWin = p.winListLen[color];
+    if (nWin > k) {
+        return nWin;
+    }
+    int sel[3];
+    int nSel = 0;
+    for (int i = 0; i < nWin && nSel < 3; ++i) {
+        sel[nSel++] = p.winList[color][i];
+    }
+    if (cover != nullptr) {
+        for (int i = 0; i < nSel; ++i) {
+            cover[i] = sel[i];
+        }
+    }
+
+    const int nFour = p.fourListLen[color];
+    if (nFour == 0) {
+        return nWin;
+    }
+
+    // 收集没有被成六点封住的四窗
+    constexpr int kMaxUncovered = 96;
+    int emptyA[kMaxUncovered];
+    int emptyB[kMaxUncovered];
+    int uncovered = 0;
+    for (int i = 0; i < nFour; ++i) {
+        int empties[2];
+        if (FourWindowEmpties(p, p.fourList[color][i], empties) != 2) {
+            continue;
+        }
+        if (ContainsCell(sel, nSel, empties[0]) || ContainsCell(sel, nSel, empties[1])) {
+            continue;
+        }
+        if (uncovered >= kMaxUncovered) {
+            return k + 1; // 威胁太多，保守认为挡不住
+        }
+        emptyA[uncovered] = empties[0];
+        emptyB[uncovered] = empties[1];
+        ++uncovered;
+    }
+    if (uncovered == 0) {
+        return nWin;
+    }
+
+    const int extraSlots = k - nSel;
+    if (extraSlots <= 0) {
+        return k + 1;
+    }
+
+    // 候选补位格子
+    int cand[64];
+    int nCand = 0;
+    for (int i = 0; i < uncovered && nCand < 64; ++i) {
+        const int cells[2] = { emptyA[i], emptyB[i] };
+        for (int e = 0; e < 2; ++e) {
+            if (ContainsCell(sel, nSel, cells[e]) || ContainsCell(cand, nCand, cells[e])) {
+                continue;
+            }
+            if (nCand < 64) {
+                cand[nCand++] = cells[e];
+            }
+        }
+    }
+
+    // 1 个补位
+    for (int i = 0; i < nCand; ++i) {
+        bool all = true;
+        for (int j = 0; j < uncovered; ++j) {
+            if (cand[i] != emptyA[j] && cand[i] != emptyB[j]) {
+                all = false;
+                break;
+            }
+        }
+        if (all) {
+            if (cover != nullptr) {
+                cover[nSel] = cand[i];
+            }
+            return nSel + 1;
+        }
+    }
+
+    // 2 个补位
+    if (extraSlots >= 2) {
+        for (int i = 0; i < nCand; ++i) {
+            for (int j = i + 1; j < nCand; ++j) {
+                bool all = true;
+                for (int u = 0; u < uncovered; ++u) {
+                    const int a = emptyA[u];
+                    const int b = emptyB[u];
+                    if (cand[i] != a && cand[i] != b && cand[j] != a && cand[j] != b) {
+                        all = false;
+                        break;
+                    }
+                }
+                if (all) {
+                    if (cover != nullptr) {
+                        cover[nSel] = cand[i];
+                        cover[nSel + 1] = cand[j];
+                    }
+                    return nSel + 2;
+                }
+            }
+        }
+    }
+    return k + 1;
+}
+
+int Evaluate(const Position& p, int ply) {
+    const int me = p.side;
+    const int opp = 3 - me;
+
+    // 我这一回合能直接赢？
+    if (p.winListLen[me] > 0) {
+        return kWinValue - ply;
+    }
+    if (p.left >= 2 && p.fourListLen[me] > 0) {
+        return kWinValue - ply;
+    }
+
+    // 对方下一回合能否必杀？我这一回合挡得住吗？
+    const int need = DefenseNeed(p, opp, p.left, nullptr);
+    if (need > p.left) {
+        return -kWinValue + ply;
+    }
+
+    static const int kWeight[6] = { 0, 1, 4, 18, 130, 900 };
+    int score = 0;
+    for (int c = 1; c <= 2; ++c) {
+        const int sign = (c == me) ? 1 : -1;
+        for (int j = 1; j <= 5; ++j) {
+            score += sign * static_cast<int>(p.catCnt[c][j]) * kWeight[j];
+        }
+    }
+    if (need > 0) {
+        score -= 400 * need;
+    }
+
+    int center = 0;
+    for (int i = 0; i < kCells; ++i) {
+        const int v = p.cell[i];
+        if (v == 0) {
+            continue;
+        }
+        const int d = std::abs(CellX(i) - kBoard / 2) + std::abs(CellY(i) - kBoard / 2);
+        center += (v == me) ? (kBoard - d) : -(kBoard - d);
+    }
+    score += center * 2;
+
+    if (score > 900000) {
+        score = 900000;
+    }
+    else if (score < -900000) {
+        score = -900000;
+    }
+    return score;
+}
+
+} // namespace c6

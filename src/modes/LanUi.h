@@ -29,7 +29,6 @@ extern IMAGE g_menuBg;
 extern IMAGE g_boardBack;
 extern IMAGE g_blackStone;
 extern IMAGE g_whiteStone;
-extern IMAGE g_buffer;
 
 // UTF-8 转宽字符（用于把网络错误信息显示到界面）
 std::wstring Widen(const std::string& text);
